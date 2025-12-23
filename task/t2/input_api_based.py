@@ -79,11 +79,11 @@ class SearchRequests(BaseModel):
 
 llm_client = AzureChatOpenAI(
     #TODO:
-    # temperature=0.0
-    # azure_deployment='gpt-4o'
-    # azure_endpoint=DIAL_URL
-    # api_key=SecretStr(API_KEY)
-    # api_version=""
+    temperature=0.0,
+    azure_deployment='gpt-4o',
+    azure_endpoint=DIAL_URL,
+    api_key=SecretStr(API_KEY),
+    api_version=""
 )
 
 user_client = UserClient()
@@ -106,7 +106,25 @@ def retrieve_context(user_question: str) -> list[dict[str, Any]]:
     #       - search users (**requests_dict) with `user_client`
     #       - return users that you found
     # 6. Otherwise print 'No specific search parameters found!' and return empty array
-    raise NotImplementedError
+    parser = PydanticOutputParser(pydantic_object=SearchRequests)
+    messages = [
+        SystemMessagePromptTemplate.from_template(template=QUERY_ANALYSIS_PROMPT),
+        HumanMessage(content=user_question)
+    ]
+    prompt = ChatPromptTemplate.from_messages(messages=messages).partial(
+        format_instructions=parser.get_format_instructions())
+
+    search_requests = (prompt | llm_client | parser).invoke({})
+    requests_dict = {}
+    if search_requests.search_request_parameters:
+
+        for search_request in search_requests.search_request_parameters:
+            requests_dict[search_request.search_field.value] = search_request.search_value
+        print(requests_dict)
+
+    users = user_client.search_users(**requests_dict)
+
+    return users
 
 
 def augment_prompt(user_question: str, context: list[dict[str, Any]]) -> str:
@@ -116,7 +134,15 @@ def augment_prompt(user_question: str, context: list[dict[str, Any]]) -> str:
     # 2. Make augmentation: ` USER_PROMPT.format(context=context_str, query=user_question)`
     # 3. print augmented prompt
     # 3. return augmented prompt
-    raise NotImplementedError
+    context_str = ""
+    for user in context:
+        context_str += f"User:\n"
+        for key, value in user.items():
+            context_str += f"  {key}: {value}\n"
+        context_str += "\n"
+    augmentation = USER_PROMPT.format(context=context_str, query=user_question)
+    print(augmentation)
+    return augmentation
 
 
 def generate_answer(augmented_prompt: str) -> str:
@@ -127,7 +153,13 @@ def generate_answer(augmented_prompt: str) -> str:
     #       - HumanMessage(content=augmented_prompt)
     # 2. Generate response `llm_client.invoke(messages)`
     # 3. Return response content
-    raise NotImplementedError
+    messages = [
+        SystemMessage(content=SYSTEM_PROMPT),
+        HumanMessage(content=augmented_prompt)
+    ]
+    response = llm_client.invoke(messages)
+    return response.content
+
 
 
 def main():
@@ -148,7 +180,16 @@ def main():
             #       - make augmentation
             #       - generate answer with augmented prompt
             # 3. Otherwise print `No relevant information found`
-    raise NotImplementedError
+            context = retrieve_context(user_question)
+            if context:
+                augmented_prompt = augment_prompt(user_question, context)
+                answer = generate_answer(augmented_prompt)
+                print(f"\n=== API GROUNDED ANSWER ===")
+                print(answer)
+            else:
+                print("No relevant information found")
+
+
 
 
 if __name__ == "__main__":

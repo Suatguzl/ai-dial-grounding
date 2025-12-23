@@ -3,6 +3,9 @@ version: '3.8'
 services:
   userservice:
     image: khshanovskyi/mockuserservice:latest
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     ports:
       - "8041:8000"
     environment:
@@ -10,7 +13,7 @@ services:
       - GENERATE_USERS=true
       - USER_COUNT=1000
     volumes:
-      - ./data:/app/data  # Optional: persist database
+      - ./data:/app/data:rw
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
